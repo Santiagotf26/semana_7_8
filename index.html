@@ -1,0 +1,2084 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Neighborhood Map | Santiago Trujillo - English Project</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    h1, h2, h3, h4, .font-display {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    /* Animated Route Line on SVG Map */
+    @keyframes dashDraw {
+      to {
+        stroke-dashoffset: -40;
+      }
+    }
+    .animated-route-path {
+      stroke-dasharray: 12 8;
+      animation: dashDraw 1s linear infinite;
+    }
+
+    /* Pulse ring for selected map pins */
+    @keyframes pulseRing {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      70% { transform: scale(1.55); opacity: 0; }
+      100% { transform: scale(1.55); opacity: 0; }
+    }
+    .pin-pulse {
+      transform-origin: center;
+      transform-box: fill-box;
+      animation: pulseRing 2s infinite;
+    }
+
+    /* Map building hover effects */
+    .map-node {
+      cursor: pointer;
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s ease;
+      transform-origin: center;
+      transform-box: fill-box;
+    }
+    .map-node:hover {
+      transform: translateY(-4px) scale(1.06);
+      filter: drop-shadow(0 8px 12px rgba(15, 23, 42, 0.25));
+    }
+    .map-node.active-node {
+      transform: translateY(-5px) scale(1.1);
+      filter: drop-shadow(0 10px 16px rgba(79, 70, 229, 0.45));
+    }
+
+    /* Highlighted landmark pulse */
+    .landmark-highlight {
+      filter: drop-shadow(0 0 10px #f59e0b) brightness(1.15);
+      transform-origin: center;
+      transform-box: fill-box;
+      animation: bounceLandmark 1s ease infinite alternate;
+    }
+    @keyframes bounceLandmark {
+      from { transform: scale(1); }
+      to { transform: scale(1.18); }
+    }
+
+    /* Vocabulary Badges in Directions */
+    .vocab-expr {
+      background-color: #e0e7ff;
+      color: #3730a3;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-weight: 600;
+      border: 1px solid #c7d2fe;
+      display: inline-block;
+      margin: 1px 0;
+    }
+    .vocab-place {
+      background-color: #fef3c7;
+      color: #92400e;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-weight: 600;
+      border: 1px solid #fde68a;
+      display: inline-block;
+      margin: 1px 0;
+    }
+
+    /* Audio Equalizer Bars */
+    @keyframes eqBar {
+      0%, 100% { height: 6px; }
+      50% { height: 24px; }
+    }
+    .eq-bar {
+      width: 4px;
+      background: #4f46e5;
+      border-radius: 9999px;
+      transition: height 0.2s ease;
+    }
+    .playing .eq-bar:nth-child(1) { animation: eqBar 0.6s ease-in-out infinite 0.1s; }
+    .playing .eq-bar:nth-child(2) { animation: eqBar 0.5s ease-in-out infinite 0.25s; }
+    .playing .eq-bar:nth-child(3) { animation: eqBar 0.7s ease-in-out infinite 0.05s; }
+    .playing .eq-bar:nth-child(4) { animation: eqBar 0.55s ease-in-out infinite 0.3s; }
+    .playing .eq-bar:nth-child(5) { animation: eqBar 0.65s ease-in-out infinite 0.15s; }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-800 selection:bg-indigo-600 selection:text-white">
+
+  <!-- TOP NAVIGATION BAR & STUDENT HEADER -->
+  <header class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+      <!-- Brand / Project Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <i class="fa-solid fa-map-location-dot text-xl"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+              English Assignment
+            </span>
+            <span class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full hidden sm:inline-flex items-center gap-1">
+              <i class="fa-solid fa-circle-check text-emerald-500"></i> Interactive Edition
+            </span>
+          </div>
+          <h1 class="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+            Greenwood District: Interactive Neighborhood Map
+          </h1>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="hidden lg:flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200/70">
+        <a href="#map-section" class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:bg-white transition flex items-center gap-1.5">
+          <i class="fa-solid fa-compass text-indigo-500"></i> 1. Map & 10 Places
+        </a>
+        <a href="#directions-section" class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:bg-white transition flex items-center gap-1.5">
+          <i class="fa-solid fa-route text-amber-500"></i> 2. 5 Directions
+        </a>
+        <a href="#written-section" class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:bg-white transition flex items-center gap-1.5">
+          <i class="fa-solid fa-pen-nib text-emerald-500"></i> 3. Written Text
+        </a>
+        <a href="#oral-section" class="px-3.5 py-1.5 rounded-lg text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:bg-white transition flex items-center gap-1.5">
+          <i class="fa-solid fa-microphone-lines text-rose-500"></i> 4. Oral Audio
+        </a>
+      </nav>
+
+      <!-- Student Profile Badge & Rubric Button -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2.5 bg-slate-900 text-white px-3.5 py-2 rounded-xl shadow-sm">
+          <div class="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-xs">
+            ST
+          </div>
+          <div class="leading-tight">
+            <p class="text-[10px] uppercase tracking-wider text-slate-300 font-semibold">Created By</p>
+            <p class="text-xs sm:text-sm font-bold text-white">Santiago Trujillo</p>
+          </div>
+        </div>
+        <button onclick="toggleRubricModal()" class="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition flex items-center gap-1.5 shadow-sm" title="Check Assignment Requirements">
+          <i class="fa-solid fa-list-check text-amber-600"></i>
+          <span class="hidden sm:inline">Rubric Check</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO BANNER -->
+  <section class="bg-gradient-to-r from-indigo-950 via-indigo-900 to-slate-900 text-white py-8 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div class="max-w-7xl mx-auto relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+      <div class="max-w-2xl">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold mb-3">
+          <i class="fa-solid fa-sparkles text-amber-400"></i> Digital Interactive Presentation â€¢ English Subject
+        </div>
+        <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+          Welcome to <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-emerald-300">Greenwood Neighborhood</span>
+        </h2>
+        <p class="mt-2 text-slate-300 text-sm sm:text-base leading-relaxed">
+          Hello! My name is <strong class="text-white">Santiago Trujillo</strong>. Explore my interactive neighborhood map featuring <strong>10 essential community places</strong>, labeled streets, traffic landmarks, <strong>5 step-by-step guided routes</strong> from my home, a <strong>6-line written overview</strong>, and an <strong>oral audio guide</strong>.
+        </p>
+      </div>
+
+      <!-- Quick Stats Pills -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full lg:w-auto">
+        <a href="#map-section" class="bg-white/10 hover:bg-white/15 backdrop-blur-sm border border-white/15 rounded-2xl p-3 text-center transition">
+          <div class="text-xl font-extrabold text-amber-300">10 + Home</div>
+          <div class="text-[11px] text-slate-300 font-medium">Clickable Places</div>
+        </a>
+        <a href="#directions-section" class="bg-white/10 hover:bg-white/15 backdrop-blur-sm border border-white/15 rounded-2xl p-3 text-center transition">
+          <div class="text-xl font-extrabold text-emerald-300">5 Routes</div>
+          <div class="text-[11px] text-slate-300 font-medium">Animated Paths</div>
+        </a>
+        <a href="#written-section" class="bg-white/10 hover:bg-white/15 backdrop-blur-sm border border-white/15 rounded-2xl p-3 text-center transition">
+          <div class="text-xl font-extrabold text-sky-300">6 Lines</div>
+          <div class="text-[11px] text-slate-300 font-medium">Written Description</div>
+        </a>
+        <a href="#oral-section" class="bg-white/10 hover:bg-white/15 backdrop-blur-sm border border-white/15 rounded-2xl p-3 text-center transition">
+          <div class="text-xl font-extrabold text-rose-300">&lt; 2 Min</div>
+          <div class="text-[11px] text-slate-300 font-medium">Oral Audio Guide</div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-12 flex-1">
+
+    <!-- =====================================================================
+         SECTION 1: INTERACTIVE NEIGHBORHOOD MAP & CLICKABLE PLACES
+         ===================================================================== -->
+    <section id="map-section" class="scroll-mt-20 space-y-5">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
+            Step 1 & Step 4 â€¢ Visual Map & Interactive Elements
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
+            Interactive Neighborhood Map
+          </h2>
+          <p class="text-sm text-slate-600">
+            Click on any building or pin to read its description, location expressions, and listen to English pronunciation. Or select one of the <strong>5 Routes</strong> to watch the animated path!
+          </p>
+        </div>
+
+        <!-- Landmark Highlight Filter Buttons -->
+        <div class="flex flex-wrap items-center gap-1.5 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+          <span class="text-xs font-bold text-slate-500 px-2">Highlight Landmarks:</span>
+          <button onclick="highlightLandmarks('all')" id="hl-all" class="hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white transition">
+            All Normal
+          </button>
+          <button onclick="highlightLandmarks('traffic-light')" id="hl-traffic-light" class="hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 transition flex items-center gap-1">
+            ðŸš¦ Traffic Lights (5)
+          </button>
+          <button onclick="highlightLandmarks('crossing')" id="hl-crossing" class="hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 transition flex items-center gap-1">
+            ðŸš¸ Crossings (6)
+          </button>
+          <button onclick="highlightLandmarks('roundabout')" id="hl-roundabout" class="hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 transition flex items-center gap-1">
+            ðŸ”„ Roundabout
+          </button>
+          <button onclick="highlightLandmarks('bridge')" id="hl-bridge" class="hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 transition flex items-center gap-1">
+            ðŸŒ‰ River Bridge
+          </button>
+          <button onclick="highlightLandmarks('corner')" id="hl-corner" class="hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 transition flex items-center gap-1">
+            ðŸ“ Street Corners
+          </button>
+        </div>
+      </div>
+
+      <!-- Map + Inspector Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- LEFT 8 COLS: INTERACTIVE VECTOR SVG MAP -->
+        <div class="lg:col-span-8 bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+          <!-- Map Top Bar: Quick Route Selector right above the map -->
+          <div class="bg-slate-900 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
+            <div class="flex items-center gap-2 text-xs sm:text-sm font-semibold">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <span class="text-slate-300">Active Map Route:</span>
+              <span id="active-route-banner" class="text-amber-300 font-bold">Route 1: Home âž” Supermarket</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="selectRoute(0)" id="top-route-btn-0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600 text-white transition">R1: Supermarket</button>
+              <button onclick="selectRoute(1)" id="top-route-btn-1" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">R2: Hospital</button>
+              <button onclick="selectRoute(2)" id="top-route-btn-2" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">R3: Subway</button>
+              <button onclick="selectRoute(3)" id="top-route-btn-3" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">R4: Library</button>
+              <button onclick="selectRoute(4)" id="top-route-btn-4" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">R5: CafÃ© & Bank</button>
+              <button onclick="clearRouteOverlay()" class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800/80 text-slate-400 hover:text-white transition" title="Hide Route Line">
+                <i class="fa-solid fa-eye-slash"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- SVG Map Canvas -->
+          <div class="relative w-full bg-[#e9f5e8] overflow-hidden">
+            <svg id="neighborhood-svg" viewBox="0 0 1000 680" class="w-full h-auto block select-none">
+              <defs>
+                <!-- Drop Shadow for Buildings -->
+                <filter id="bldg-shadow" x="-15%" y="-15%" width="130%" height="140%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.18" />
+                </filter>
+                <!-- Glowing Route Shadow -->
+                <filter id="route-glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#4f46e5" flood-opacity="0.7" />
+                </filter>
+                <!-- Grass Pattern -->
+                <pattern id="park-grass" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <rect width="40" height="40" fill="#bbf7d0" />
+                  <circle cx="10" cy="10" r="2" fill="#86efac" />
+                  <circle cx="30" cy="25" r="2.5" fill="#86efac" />
+                </pattern>
+                <!-- Water Pattern -->
+                <linearGradient id="river-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#38bdf8" />
+                  <stop offset="50%" stop-color="#0284c7" />
+                  <stop offset="100%" stop-color="#38bdf8" />
+                </linearGradient>
+              </defs>
+
+              <!-- 1. BACKGROUND CITY BLOCKS -->
+              <rect width="1000" height="680" fill="#eef6ec" />
+
+              <!-- Decorative Neighborhood Blocks (Light pastel parcels) -->
+              <!-- Top Row Blocks (North of Maple Rd) -->
+              <rect x="40" y="30" width="165" height="90" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="275" y="30" width="210" height="90" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="555" y="30" width="210" height="90" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="835" y="30" width="135" height="90" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+
+              <!-- Upper-Middle Blocks (Between Maple Rd y=150 and Main St y=350) -->
+              <rect x="40" y="180" width="165" height="140" rx="14" fill="#e5efe9" stroke="#cbdcd1" stroke-width="2" />
+              <!-- CENTRAL PARK BLOCK -->
+              <rect x="275" y="180" width="210" height="140" rx="18" fill="url(#park-grass)" stroke="#4ade80" stroke-width="3" />
+              <!-- Commercial Block (CafÃ© & Bank) -->
+              <rect x="555" y="180" width="210" height="140" rx="14" fill="#f3f4f6" stroke="#d1d5db" stroke-width="2" />
+              <!-- East Block (Store & Compass) -->
+              <rect x="835" y="180" width="135" height="140" rx="14" fill="#e5efe9" stroke="#cbdcd1" stroke-width="2" />
+
+              <!-- Lower-Middle Blocks (Between Main St y=350 and River Blvd y=550) -->
+              <rect x="40" y="380" width="165" height="140" rx="14" fill="#e5efe9" stroke="#cbdcd1" stroke-width="2" />
+              <rect x="275" y="380" width="210" height="140" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="555" y="380" width="210" height="140" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="835" y="380" width="135" height="140" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+
+              <!-- Bottom Row Blocks (South of River Blvd y=550) -->
+              <rect x="40" y="580" width="165" height="75" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="275" y="580" width="210" height="75" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+              <rect x="555" y="580" width="210" height="75" rx="14" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+              <rect x="835" y="580" width="135" height="75" rx="14" fill="#dcece2" stroke="#c6dfd0" stroke-width="2" />
+
+              <!-- 2. BLUEWATER RIVER (Flows across the southern half, crossed by Oak Ave Bridge) -->
+              <path d="M 260 455 Q 390 435, 520 455 T 790 455 L 1000 455" fill="none" stroke="#bae6fd" stroke-width="46" stroke-linecap="round" />
+              <path d="M 260 455 Q 390 435, 520 455 T 790 455 L 1000 455" fill="none" stroke="url(#river-grad)" stroke-width="36" stroke-linecap="round" />
+              <!-- Water ripples -->
+              <path d="M 330 452 Q 355 445, 380 452" fill="none" stroke="#e0f2fe" stroke-width="2" stroke-linecap="round" />
+              <path d="M 620 458 Q 650 450, 680 458" fill="none" stroke="#e0f2fe" stroke-width="2" stroke-linecap="round" />
+              <text x="385" y="460" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1.5" opacity="0.9">BLUEWATER RIVER</text>
+
+              <!-- 3. ROAD NETWORK (Sidewalks + Asphalt + Dashed Center Lines) -->
+              <!-- Sidewalk Outlines -->
+              <g stroke="#cbd5e1" stroke-width="54" stroke-linecap="square">
+                <!-- Horizontal Streets -->
+                <line x1="20" y1="150" x2="980" y2="150" />
+                <line x1="20" y1="350" x2="980" y2="350" />
+                <line x1="20" y1="550" x2="980" y2="550" />
+                <!-- Vertical Streets -->
+                <line x1="240" y1="20" x2="240" y2="660" />
+                <line x1="520" y1="20" x2="520" y2="660" />
+                <line x1="800" y1="20" x2="800" y2="660" />
+              </g>
+
+              <!-- Road Asphalt -->
+              <g stroke="#334155" stroke-width="44" stroke-linecap="square">
+                <line x1="20" y1="150" x2="980" y2="150" />
+                <line x1="20" y1="350" x2="980" y2="350" />
+                <line x1="20" y1="550" x2="980" y2="550" />
+                <line x1="240" y1="20" x2="240" y2="660" />
+                <line x1="520" y1="20" x2="520" y2="660" />
+                <line x1="800" y1="20" x2="800" y2="660" />
+              </g>
+
+              <!-- Road Dashed Center Lines -->
+              <g stroke="#94a3b8" stroke-width="2" stroke-dasharray="10 10" opacity="0.8">
+                <line x1="30" y1="150" x2="970" y2="150" />
+                <line x1="30" y1="350" x2="970" y2="350" />
+                <line x1="30" y1="550" x2="970" y2="550" />
+                <line x1="240" y1="30" x2="240" y2="650" />
+                <line x1="520" y1="30" x2="520" y2="650" />
+                <line x1="800" y1="30" x2="800" y2="650" />
+              </g>
+
+              <!-- 4. LANDMARK: RIVER BRIDGE (Oak Avenue Bridge at x=520, y=455) -->
+              <g class="landmark-item landmark-bridge cursor-pointer" onclick="inspectLandmark('bridge')">
+                <!-- Bridge Deck & Parapets -->
+                <rect x="492" y="424" width="56" height="62" rx="6" fill="#475569" stroke="#f59e0b" stroke-width="3" />
+                <rect x="488" y="424" width="8" height="62" rx="3" fill="#d97706" />
+                <rect x="544" y="424" width="8" height="62" rx="3" fill="#d97706" />
+                <!-- Bridge Road Stripes -->
+                <line x1="520" y1="428" x2="520" y2="482" stroke="#fde047" stroke-width="2.5" stroke-dasharray="6 6" />
+                <!-- Bridge Label Badge -->
+                <rect x="556" y="443" width="90" height="22" rx="6" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5" />
+                <text x="601" y="458" fill="#92400e" font-size="10" font-weight="800" text-anchor="middle">ðŸŒ‰ RIVER BRIDGE</text>
+              </g>
+
+              <!-- Secondary East Bridge on Cedar St (x=800, y=455) -->
+              <g class="landmark-item landmark-bridge cursor-pointer" onclick="inspectLandmark('bridge')">
+                <rect x="774" y="426" width="52" height="58" rx="4" fill="#475569" stroke="#94a3b8" stroke-width="2" />
+                <rect x="770" y="426" width="6" height="58" rx="2" fill="#cbd5e1" />
+                <rect x="824" y="426" width="6" height="58" rx="2" fill="#cbd5e1" />
+              </g>
+
+              <!-- 5. LANDMARK: CENTRAL ROUNDABOUT / CENTRAL SQUARE (x=520, y=350) -->
+              <g class="landmark-item landmark-roundabout cursor-pointer" onclick="inspectLandmark('roundabout')">
+                <circle cx="520" cy="350" r="46" fill="#334155" stroke="#cbd5e1" stroke-width="5" />
+                <circle cx="520" cy="350" r="36" fill="none" stroke="#fde047" stroke-width="2" stroke-dasharray="7 6" />
+                <!-- Inner Green Island & Fountain -->
+                <circle cx="520" cy="350" r="24" fill="#22c55e" stroke="#bbf7d0" stroke-width="3" />
+                <circle cx="520" cy="350" r="14" fill="#38bdf8" stroke="#e0f2fe" stroke-width="2" />
+                <circle cx="520" cy="350" r="5" fill="#ffffff" />
+                <!-- Roundabout Tag -->
+                <rect x="462" y="388" width="116" height="20" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" />
+                <text x="520" y="401" fill="#38bdf8" font-size="9.5" font-weight="800" text-anchor="middle">ðŸ”„ ROUNDABOUT</text>
+              </g>
+
+              <!-- 6. LANDMARK: PEDESTRIAN CROSSINGS (Zebra Stripes) -->
+              <g class="landmark-item landmark-crossing cursor-pointer" onclick="inspectLandmark('crossing')" fill="#ffffff" opacity="0.92">
+                <!-- Crossing 1: Maple Rd & Pine St (North-West) -->
+                <g transform="translate(185, 134)">
+                  <rect x="0" y="0" width="16" height="4" rx="1" />
+                  <rect x="0" y="7" width="16" height="4" rx="1" />
+                  <rect x="0" y="14" width="16" height="4" rx="1" />
+                  <rect x="0" y="21" width="16" height="4" rx="1" />
+                  <rect x="0" y="28" width="16" height="4" rx="1" />
+                </g>
+                <!-- Crossing 2: Maple Rd in front of Library (x=375) -->
+                <g transform="translate(367, 134)">
+                  <rect x="0" y="0" width="16" height="4" rx="1" />
+                  <rect x="0" y="7" width="16" height="4" rx="1" />
+                  <rect x="0" y="14" width="16" height="4" rx="1" />
+                  <rect x="0" y="21" width="16" height="4" rx="1" />
+                  <rect x="0" y="28" width="16" height="4" rx="1" />
+                </g>
+                <!-- Crossing 3: Maple Rd & Oak Ave (x=555, towards Hospital) -->
+                <g transform="translate(555, 134)">
+                  <rect x="0" y="0" width="16" height="4" rx="1" />
+                  <rect x="0" y="7" width="16" height="4" rx="1" />
+                  <rect x="0" y="14" width="16" height="4" rx="1" />
+                  <rect x="0" y="21" width="16" height="4" rx="1" />
+                  <rect x="0" y="28" width="16" height="4" rx="1" />
+                </g>
+                <!-- Crossing 4: Main St & Pine St -->
+                <g transform="translate(224, 302)">
+                  <rect x="0" y="0" width="4" height="16" rx="1" />
+                  <rect x="7" y="0" width="4" height="16" rx="1" />
+                  <rect x="14" y="0" width="4" height="16" rx="1" />
+                  <rect x="21" y="0" width="4" height="16" rx="1" />
+                  <rect x="28" y="0" width="4" height="16" rx="1" />
+                </g>
+                <!-- Crossing 5: Main St in front of CafÃ© & Bank (x=680) -->
+                <g transform="translate(675, 334)">
+                  <rect x="0" y="0" width="16" height="4" rx="1" />
+                  <rect x="0" y="7" width="16" height="4" rx="1" />
+                  <rect x="0" y="14" width="16" height="4" rx="1" />
+                  <rect x="0" y="21" width="16" height="4" rx="1" />
+                  <rect x="0" y="28" width="16" height="4" rx="1" />
+                </g>
+                <!-- Crossing 6: River Blvd at Subway Station (x=655) -->
+                <g transform="translate(657, 534)">
+                  <rect x="0" y="0" width="16" height="4" rx="1" />
+                  <rect x="0" y="7" width="16" height="4" rx="1" />
+                  <rect x="0" y="14" width="16" height="4" rx="1" />
+                  <rect x="0" y="21" width="16" height="4" rx="1" />
+                  <rect x="0" y="28" width="16" height="4" rx="1" />
+                </g>
+              </g>
+
+              <!-- 7. STREET NAMES ON ROADS -->
+              <g font-family="Plus Jakarta Sans, sans-serif" font-size="11" font-weight="800" fill="#f8fafc" letter-spacing="1.5" opacity="0.9">
+                <!-- Horizontal Street Labels -->
+                <text x="115" y="154" text-anchor="middle">MAPLE ROAD</text>
+                <text x="720" y="154" text-anchor="middle">MAPLE ROAD</text>
+                <text x="115" y="354" text-anchor="middle">MAIN STREET</text>
+                <text x="380" y="354" text-anchor="middle">MAIN STREET</text>
+                <text x="640" y="354" text-anchor="middle">MAIN STREET</text>
+                <text x="380" y="554" text-anchor="middle">RIVER BOULEVARD</text>
+                <text x="750" y="554" text-anchor="middle">RIVER BOULEVARD</text>
+
+                <!-- Vertical Street Labels -->
+                <text x="240" y="255" text-anchor="middle" transform="rotate(-90 240 255)">PINE STREET</text>
+                <text x="240" y="465" text-anchor="middle" transform="rotate(-90 240 465)">PINE STREET</text>
+                <text x="520" y="245" text-anchor="middle" transform="rotate(-90 520 245)">OAK AVENUE</text>
+                <text x="800" y="255" text-anchor="middle" transform="rotate(-90 800 255)">CEDAR STREET</text>
+              </g>
+
+              <!-- 8. LANDMARK: STREET CORNERS (Labeled Corner Markers) -->
+              <g class="landmark-item landmark-corner cursor-pointer" onclick="inspectLandmark('corner')">
+                <circle cx="212" cy="322" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+                <circle cx="212" cy="178" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+                <circle cx="548" cy="178" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+                <circle cx="548" cy="522" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+                <circle cx="772" cy="322" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+              </g>
+
+              <!-- 9. LANDMARK: TRAFFIC LIGHTS (5 Intersections) -->
+              <g class="landmark-item landmark-traffic-light cursor-pointer" onclick="inspectLandmark('traffic-light')">
+                <!-- TL 1: Pine St & Main St (240, 350) -->
+                <g transform="translate(256, 362)">
+                  <rect x="0" y="0" width="14" height="30" rx="4" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />
+                  <circle cx="7" cy="7" r="3.2" fill="#ef4444" />
+                  <circle cx="7" cy="15" r="3.2" fill="#f59e0b" />
+                  <circle cx="7" cy="23" r="3.2" fill="#22c55e" />
+                </g>
+                <!-- TL 2: Pine St & Maple Rd (240, 150) -->
+                <g transform="translate(256, 108)">
+                  <rect x="0" y="0" width="14" height="30" rx="4" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />
+                  <circle cx="7" cy="7" r="3.2" fill="#ef4444" />
+                  <circle cx="7" cy="15" r="3.2" fill="#f59e0b" />
+                  <circle cx="7" cy="23" r="3.2" fill="#22c55e" />
+                </g>
+                <!-- TL 3: Oak Ave & Maple Rd (520, 150) -->
+                <g transform="translate(490, 108)">
+                  <rect x="0" y="0" width="14" height="30" rx="4" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />
+                  <circle cx="7" cy="7" r="3.2" fill="#ef4444" />
+                  <circle cx="7" cy="15" r="3.2" fill="#f59e0b" />
+                  <circle cx="7" cy="23" r="3.2" fill="#22c55e" />
+                </g>
+                <!-- TL 4: Cedar St & Main St (800, 350) -->
+                <g transform="translate(816, 362)">
+                  <rect x="0" y="0" width="14" height="30" rx="4" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />
+                  <circle cx="7" cy="7" r="3.2" fill="#ef4444" />
+                  <circle cx="7" cy="15" r="3.2" fill="#f59e0b" />
+                  <circle cx="7" cy="23" r="3.2" fill="#22c55e" />
+                </g>
+                <!-- TL 5: Oak Ave & River Blvd (520, 550) -->
+                <g transform="translate(490, 560)">
+                  <rect x="0" y="0" width="14" height="30" rx="4" fill="#0f172a" stroke="#ffffff" stroke-width="1.5" />
+                  <circle cx="7" cy="7" r="3.2" fill="#ef4444" />
+                  <circle cx="7" cy="15" r="3.2" fill="#f59e0b" />
+                  <circle cx="7" cy="23" r="3.2" fill="#22c55e" />
+                </g>
+              </g>
+
+              <!-- 10. ANIMATED ROUTE OVERLAY LAYER (Draws active path from Santiago's Home) -->
+              <g id="route-layer">
+                <!-- Outer glow path -->
+                <polyline id="route-glow-line"
+                  points="125,415 125,350 240,350 240,150 125,150 125,95"
+                  fill="none"
+                  stroke="#4f46e5"
+                  stroke-width="12"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  opacity="0.35"
+                  filter="url(#route-glow)" />
+                <!-- Animated dashed directional path -->
+                <polyline id="route-dash-line"
+                  class="animated-route-path"
+                  points="125,415 125,350 240,350 240,150 125,150 125,95"
+                  fill="none"
+                  stroke="#ffffff"
+                  stroke-width="5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round" />
+                <!-- Target Destination Pulsing Ring -->
+                <circle id="route-dest-ring" cx="125" cy="75" r="34" fill="none" stroke="#4f46e5" stroke-width="4" class="pin-pulse" />
+              </g>
+
+              <!-- ===============================================================
+                   11. CLICKABLE BUILDINGS: SANTIAGO'S HOME + 10 COMMON PLACES
+                   =============================================================== -->
+
+              <!-- START: SANTIAGO'S HOME (x=125, y=435) -->
+              <g id="node-home" class="map-node" onclick="selectPlace('home')" filter="url(#bldg-shadow)">
+                <circle cx="125" cy="435" r="32" fill="#fef3c7" stroke="#f59e0b" stroke-width="3" class="pin-pulse" />
+                <rect x="65" y="395" width="120" height="72" rx="14" fill="#fffbeb" stroke="#d97706" stroke-width="3" />
+                <!-- House Roof Icon -->
+                <polygon points="125,403 102,422 148,422" fill="#ea580c" />
+                <rect x="110" y="422" width="30" height="20" rx="3" fill="#f97316" />
+                <rect x="121" y="429" width="8" height="13" fill="#fffbeb" />
+                <rect x="72" y="446" width="106" height="18" rx="6" fill="#b45309" />
+                <text x="125" y="458" fill="#ffffff" font-size="10" font-weight="800" text-anchor="middle">ðŸ  SANTIAGO'S HOME</text>
+              </g>
+
+              <!-- PLACE 1: SUPERMARKET (FreshMart Supermarket) (x=125, y=75) -->
+              <g id="node-supermarket" class="map-node" onclick="selectPlace('supermarket')" filter="url(#bldg-shadow)">
+                <rect x="58" y="38" width="134" height="74" rx="14" fill="#ecfdf5" stroke="#10b981" stroke-width="3" />
+                <circle cx="90" cy="66" r="15" fill="#10b981" />
+                <text x="90" y="71" fill="#ffffff" font-size="14" text-anchor="middle">ðŸ›’</text>
+                <text x="144" y="63" fill="#065f46" font-size="11" font-weight="800" text-anchor="middle">SUPERMARKET</text>
+                <text x="144" y="76" fill="#047857" font-size="9" font-weight="600" text-anchor="middle">FreshMart</text>
+                <rect x="68" y="90" width="114" height="16" rx="5" fill="#059669" />
+                <text x="125" y="101" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1. SUPERMARKET</text>
+              </g>
+
+              <!-- PLACE 2: SCHOOL (Greenwood High School) (x=125, y=245) -->
+              <g id="node-school" class="map-node" onclick="selectPlace('school')" filter="url(#bldg-shadow)">
+                <rect x="58" y="205" width="134" height="82" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="3" />
+                <circle cx="90" cy="236" r="15" fill="#2563eb" />
+                <text x="90" y="241" fill="#ffffff" font-size="14" text-anchor="middle">ðŸ«</text>
+                <text x="144" y="233" fill="#1e3a8a" font-size="11" font-weight="800" text-anchor="middle">HIGH SCHOOL</text>
+                <text x="144" y="246" fill="#1d4ed8" font-size="9" font-weight="600" text-anchor="middle">Greenwood Prep</text>
+                <rect x="68" y="264" width="114" height="16" rx="5" fill="#2563eb" />
+                <text x="125" y="275" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2. SCHOOL</text>
+              </g>
+
+              <!-- PLACE 3: PARK (Greenwood Central Park) (x=380, y=250) -->
+              <g id="node-park" class="map-node" onclick="selectPlace('park')" filter="url(#bldg-shadow)">
+                <!-- Decorative Trees in Park -->
+                <circle cx="305" cy="210" r="16" fill="#16a34a" />
+                <circle cx="320" cy="202" r="13" fill="#22c55e" />
+                <circle cx="455" cy="215" r="15" fill="#16a34a" />
+                <circle cx="305" cy="290" r="14" fill="#15803d" />
+                <circle cx="455" cy="285" r="16" fill="#22c55e" />
+                <!-- Park Central Pavilion Badge -->
+                <rect x="322" y="212" width="116" height="74" rx="16" fill="#f0fdf4" stroke="#16a34a" stroke-width="3" />
+                <text x="380" y="238" font-size="20" text-anchor="middle">ðŸŒ³</text>
+                <text x="380" y="256" fill="#14532d" font-size="11" font-weight="800" text-anchor="middle">CENTRAL PARK</text>
+                <rect x="332" y="264" width="96" height="16" rx="5" fill="#15803d" />
+                <text x="380" y="275" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3. PARK</text>
+              </g>
+
+              <!-- PLACE 4: LIBRARY (Public Community Library) (x=380, y=75) -->
+              <g id="node-library" class="map-node" onclick="selectPlace('library')" filter="url(#bldg-shadow)">
+                <rect x="308" y="38" width="144" height="74" rx="14" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="3" />
+                <circle cx="340" cy="66" r="15" fill="#7c3aed" />
+                <text x="340" y="71" fill="#ffffff" font-size="14" text-anchor="middle">ðŸ“š</text>
+                <text x="398" y="63" fill="#4c1d95" font-size="11" font-weight="800" text-anchor="middle">LIBRARY</text>
+                <text x="398" y="76" fill="#6d28d9" font-size="9" font-weight="600" text-anchor="middle">City Books & Hall</text>
+                <rect x="320" y="90" width="120" height="16" rx="5" fill="#7c3aed" />
+                <text x="380" y="101" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4. LIBRARY</text>
+              </g>
+
+              <!-- PLACE 5: HOSPITAL (City General Hospital) (x=660, y=75) -->
+              <g id="node-hospital" class="map-node" onclick="selectPlace('hospital')" filter="url(#bldg-shadow)">
+                <rect x="585" y="38" width="150" height="74" rx="14" fill="#fef2f2" stroke="#ef4444" stroke-width="3" />
+                <circle cx="618" cy="66" r="15" fill="#dc2626" />
+                <text x="618" y="71" fill="#ffffff" font-size="14" text-anchor="middle">ðŸ¥</text>
+                <text x="678" y="63" fill="#7f1d1d" font-size="11" font-weight="800" text-anchor="middle">HOSPITAL</text>
+                <text x="678" y="76" fill="#b91c1c" font-size="9" font-weight="600" text-anchor="middle">City General</text>
+                <rect x="598" y="90" width="124" height="16" rx="5" fill="#dc2626" />
+                <text x="660" y="101" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">5. HOSPITAL</text>
+              </g>
+
+              <!-- PLACE 6: PHARMACY (HealthPlus Pharmacy) (x=900, y=75) -->
+              <g id="node-pharmacy" class="map-node" onclick="selectPlace('pharmacy')" filter="url(#bldg-shadow)">
+                <rect x="840" y="38" width="124" height="74" rx="14" fill="#f0fdfa" stroke="#14b8a6" stroke-width="3" />
+                <circle cx="868" cy="66" r="14" fill="#0d9488" />
+                <text x="868" y="71" fill="#ffffff" font-size="13" text-anchor="middle">ðŸ’Š</text>
+                <text x="920" y="63" fill="#134e4a" font-size="10.5" font-weight="800" text-anchor="middle">PHARMACY</text>
+                <text x="920" y="76" fill="#0f766e" font-size="8.5" font-weight="600" text-anchor="middle">HealthPlus</text>
+                <rect x="848" y="90" width="108" height="16" rx="5" fill="#0d9488" />
+                <text x="902" y="101" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">6. PHARMACY</text>
+              </g>
+
+              <!-- PLACE 7: CAFÃ‰ (Sunrise Coffee & Bakery) (x=608, y=250) -->
+              <g id="node-cafe" class="map-node" onclick="selectPlace('cafe')" filter="url(#bldg-shadow)">
+                <rect x="560" y="205" width="96" height="82" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="3" />
+                <text x="608" y="232" font-size="18" text-anchor="middle">â˜•</text>
+                <text x="608" y="248" fill="#7c2d12" font-size="10.5" font-weight="800" text-anchor="middle">SUNRISE CAFÃ‰</text>
+                <text x="608" y="259" fill="#c2410c" font-size="8.5" font-weight="600" text-anchor="middle">Coffee & Bakery</text>
+                <rect x="568" y="265" width="80" height="16" rx="5" fill="#ea580c" />
+                <text x="608" y="276" fill="#ffffff" font-size="8.5" font-weight="700" text-anchor="middle">7. CAFÃ‰</text>
+              </g>
+
+              <!-- PLACE 8: BANK (National Trust Bank - Next to the CafÃ©!) (x=712, y=250) -->
+              <g id="node-bank" class="map-node" onclick="selectPlace('bank')" filter="url(#bldg-shadow)">
+                <rect x="664" y="205" width="96" height="82" rx="14" fill="#f8fafc" stroke="#475569" stroke-width="3" />
+                <text x="712" y="232" font-size="18" text-anchor="middle">ðŸ¦</text>
+                <text x="712" y="248" fill="#0f172a" font-size="10.5" font-weight="800" text-anchor="middle">CITY BANK</text>
+                <text x="712" y="259" fill="#334155" font-size="8.5" font-weight="600" text-anchor="middle">National Trust</text>
+                <rect x="672" y="265" width="80" height="16" rx="5" fill="#334155" />
+                <text x="712" y="276" fill="#ffffff" font-size="8.5" font-weight="700" text-anchor="middle">8. BANK</text>
+              </g>
+
+              <!-- PLACE 9: STORE (MegaTech & Daily Store) (x=902, y=250) -->
+              <g id="node-store" class="map-node" onclick="selectPlace('store')" filter="url(#bldg-shadow)">
+                <rect x="840" y="205" width="124" height="82" rx="14" fill="#fdf4ff" stroke="#d946ef" stroke-width="3" />
+                <circle cx="868" cy="235" r="14" fill="#c026d3" />
+                <text x="868" y="240" fill="#ffffff" font-size="13" text-anchor="middle">ðŸ›ï¸</text>
+                <text x="920" y="233" fill="#701a75" font-size="10.5" font-weight="800" text-anchor="middle">MEGA STORE</text>
+                <text x="920" y="246" fill="#a21caf" font-size="8.5" font-weight="600" text-anchor="middle">Tech & Clothes</text>
+                <rect x="848" y="264" width="108" height="16" rx="5" fill="#c026d3" />
+                <text x="902" y="275" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">9. STORE</text>
+              </g>
+
+              <!-- PLACE 10: SUBWAY STATION (Metro South Station) (x=660, y=615) -->
+              <g id="node-subway" class="map-node" onclick="selectPlace('subway')" filter="url(#bldg-shadow)">
+                <rect x="580" y="582" width="160" height="72" rx="14" fill="#eef2ff" stroke="#4f46e5" stroke-width="3" />
+                <circle cx="614" cy="610" r="15" fill="#4f46e5" />
+                <text x="614" y="615" fill="#ffffff" font-size="14" text-anchor="middle">ðŸš‡</text>
+                <text x="680" y="606" fill="#1e1b4b" font-size="11" font-weight="800" text-anchor="middle">SUBWAY STATION</text>
+                <text x="680" y="619" fill="#4338ca" font-size="9" font-weight="600" text-anchor="middle">Metro South Line</text>
+                <rect x="594" y="632" width="132" height="16" rx="5" fill="#4f46e5" />
+                <text x="660" y="643" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">10. SUBWAY STATION</text>
+              </g>
+
+              <!-- ===============================================================
+                   12. COMPASS ROSE (North, South, East, West) - Bottom Right Corner
+                   =============================================================== -->
+              <g id="compass-rose" transform="translate(905, 595)" filter="url(#bldg-shadow)" class="cursor-pointer" onclick="inspectLandmark('compass')">
+                <circle cx="0" cy="0" r="52" fill="#0f172a" stroke="#f8fafc" stroke-width="3" />
+                <circle cx="0" cy="0" r="44" fill="none" stroke="#334155" stroke-width="1.5" stroke-dasharray="4 4" />
+                <!-- Compass Star Points -->
+                <!-- North Pointer (Red/Amber) -->
+                <polygon points="0,-36 -8,0 8,0" fill="#ef4444" />
+                <!-- South Pointer -->
+                <polygon points="0,36 -8,0 8,0" fill="#cbd5e1" />
+                <!-- East Pointer -->
+                <polygon points="36,0 0,-8 0,8" fill="#94a3b8" />
+                <!-- West Pointer -->
+                <polygon points="-36,0 0,-8 0,8" fill="#94a3b8" />
+                <circle cx="0" cy="0" r="5" fill="#fbbf24" />
+                <!-- N S E W Labels -->
+                <text x="0" y="-39" fill="#fbbf24" font-size="12" font-weight="900" text-anchor="middle">N</text>
+                <text x="0" y="47" fill="#f8fafc" font-size="11" font-weight="800" text-anchor="middle">S</text>
+                <text x="43" y="4" fill="#f8fafc" font-size="11" font-weight="800" text-anchor="middle">E</text>
+                <text x="-43" y="4" fill="#f8fafc" font-size="11" font-weight="800" text-anchor="middle">W</text>
+              </g>
+            </svg>
+
+            <!-- Map Legend Footer Bar -->
+            <div class="bg-white/95 border-t border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="font-bold text-slate-800">Map Legend:</span>
+                <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> Home (Start)</span>
+                <span class="inline-flex items-center gap-1"><span class="w-4 h-1.5 rounded bg-indigo-600 inline-block"></span> Animated Route</span>
+                <span class="inline-flex items-center gap-1">ðŸš¦ Traffic Light</span>
+                <span class="inline-flex items-center gap-1">ðŸš¸ Crossing</span>
+                <span class="inline-flex items-center gap-1">ðŸ”„ Roundabout</span>
+                <span class="inline-flex items-center gap-1">ðŸŒ‰ Bridge</span>
+                <span class="inline-flex items-center gap-1">ðŸ§­ Compass (N/S/E/W)</span>
+              </div>
+              <span class="text-[11px] font-semibold text-indigo-600">Tip: Click any building on the map!</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT 4 COLS: INTERACTIVE PLACE INSPECTOR & 10 PLACES DIRECTORY -->
+        <div class="lg:col-span-4 space-y-5">
+
+          <!-- Selected Place Interactive Card -->
+          <div id="place-detail-card" class="bg-white rounded-3xl border border-slate-200 shadow-lg p-5 sm:p-6 relative overflow-hidden transition-all">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div id="detail-icon" class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-3xl shadow-sm">
+                  ðŸ›’
+                </div>
+                <div>
+                  <span id="detail-badge" class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Place #1 of 10
+                  </span>
+                  <h3 id="detail-title" class="text-xl font-extrabold text-slate-900 mt-0.5">
+                    FreshMart Supermarket
+                  </h3>
+                  <p id="detail-street" class="text-xs font-semibold text-slate-500">
+                    ðŸ“ Corner of Maple Road & Pine Street (North-West)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div class="mt-4 space-y-3">
+              <div class="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80">
+                <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Place Description</p>
+                <p id="detail-desc" class="text-sm text-slate-700 leading-relaxed">
+                  A large, modern grocery store where my family buys fresh fruits, vegetables, bread, and daily food supplies every weekend.
+                </p>
+              </div>
+
+              <div class="bg-indigo-50/70 rounded-2xl p-3.5 border border-indigo-100">
+                <p class="text-xs font-bold uppercase tracking-wider text-indigo-600 mb-1">
+                  Location & Prepositions
+                </p>
+                <p id="detail-location-rel" class="text-sm font-medium text-indigo-950 leading-relaxed">
+                  It is on <strong>Maple Road</strong>, <strong>in front of</strong> Greenwood High School and five minutes by foot from Santiago's Home.
+                </p>
+              </div>
+            </div>
+
+            <!-- Interactive Audio & Route Actions -->
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <button onclick="speakCurrentPlace()" class="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm">
+                <i class="fa-solid fa-volume-high"></i> Listen in English
+              </button>
+              <button id="detail-route-btn" onclick="selectRoute(0)" class="py-2.5 px-4 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-route"></i> Show Route
+              </button>
+            </div>
+          </div>
+
+          <!-- Directory Grid of All 10 Places + Home -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
+                All Map Locations (Click to Inspect)
+              </h4>
+              <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                10 Required + Home
+              </span>
+            </div>
+            <div id="places-grid-list" class="grid grid-cols-2 gap-2">
+              <!-- Populated dynamically by JS -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         SECTION 2: 5 GUIDED DESTINATIONS & DIRECTIONS FROM SANTIAGO'S HOME
+         ===================================================================== -->
+    <section id="directions-section" class="scroll-mt-20 space-y-6">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">
+            Step 2 â€¢ 5 Written Directions & Required Vocabulary
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
+            Directions to 5 Destinations (From My Home)
+          </h2>
+          <p class="text-sm text-slate-600">
+            Select any of the 5 destinations below to highlight the animated route on the map and listen to the step-by-step instructions.
+          </p>
+        </div>
+
+        <!-- Vocabulary Color Legend -->
+        <div class="flex flex-wrap items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-slate-200 text-xs shadow-sm">
+          <span class="font-bold text-slate-500">Vocabulary Key:</span>
+          <span class="vocab-expr">Direction Expressions</span>
+          <span class="vocab-place">Landmarks & Street Vocab</span>
+        </div>
+      </div>
+
+      <!-- 5 Route Selector Tabs -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" id="route-cards-selector">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Active Route Detailed Instruction Box -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div id="route-detail-icon" class="w-14 h-14 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-3xl">
+              ðŸ›’
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span id="route-detail-number" class="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                  Destination #1 of 5
+                </span>
+                <span id="route-detail-time" class="text-xs font-semibold text-emerald-300 flex items-center gap-1">
+                  <i class="fa-solid fa-person-walking"></i> Five minutes by foot
+                </span>
+              </div>
+              <h3 id="route-detail-title" class="text-xl sm:text-2xl font-extrabold mt-1">
+                From Santiago's Home to FreshMart Supermarket
+              </h3>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2.5">
+            <button onclick="speakActiveRoute()" id="btn-speak-route" class="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs sm:text-sm transition flex items-center gap-2 shadow-md">
+              <i class="fa-solid fa-volume-high"></i> Play Audio Directions
+            </button>
+            <a href="#map-section" class="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs sm:text-sm transition flex items-center gap-1.5">
+              <i class="fa-solid fa-map"></i> View on Map
+            </a>
+          </div>
+        </div>
+
+        <!-- Step-by-step instructions + Full Paragraph -->
+        <div class="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          <!-- Step List (7 cols) -->
+          <div class="lg:col-span-7 space-y-3" id="route-steps-list">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Complete Written Paragraph & Checklist (5 cols) -->
+          <div class="lg:col-span-5 bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                Complete Written Paragraph
+              </span>
+              <button onclick="copyRouteText()" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                <i class="fa-regular fa-copy"></i> Copy Text
+              </button>
+            </div>
+            <p id="route-full-paragraph" class="text-sm text-slate-800 leading-relaxed bg-white p-4 rounded-xl border border-slate-200/80 shadow-inner">
+              <!-- Populated by JS -->
+            </p>
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Expressions & Vocabulary Used in This Route:
+              </p>
+              <div id="route-vocab-tags" class="flex flex-wrap gap-1.5">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- All 5 Routes Summary Accordion / Printable View -->
+      <details class="bg-white rounded-2xl border border-slate-200 shadow-sm group">
+        <summary class="px-6 py-4 cursor-pointer font-bold text-sm text-slate-800 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-table-list text-indigo-600"></i>
+            View All 5 Written Directions Together (Teacher Quick-Review Sheet)
+          </span>
+          <span class="text-xs font-semibold text-indigo-600 group-open:rotate-180 transition-transform">
+            <i class="fa-solid fa-chevron-down"></i>
+          </span>
+        </summary>
+        <div id="all-routes-summary-sheet" class="px-6 pb-6 pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Populated by JS -->
+        </div>
+      </details>
+    </section>
+
+    <!-- =====================================================================
+         SECTION 3: WRITTEN DESCRIPTION OF THE NEIGHBORHOOD (5-6 LINES)
+         ===================================================================== -->
+    <section id="written-section" class="scroll-mt-20">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+        <div class="p-6 sm:p-8">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
+                Step 3 (Written Means) â€¢ 5â€“6 Lines Neighborhood Overview
+              </span>
+              <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
+                Written Description of My Neighborhood
+              </h2>
+              <p class="text-sm text-slate-600">
+                Describing Greenwood District in general terms: what places are there, what I like most, and how the locations are arranged.
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="toggleLineNumbers()" id="btn-line-view" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center gap-1.5">
+                <i class="fa-solid fa-list-ol"></i> Toggle Line Numbers (6 Lines)
+              </button>
+              <button onclick="speakWrittenDescription()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm transition flex items-center gap-2 shadow-sm">
+                <i class="fa-solid fa-volume-high"></i> Listen to Description
+              </button>
+            </div>
+          </div>
+
+          <!-- 6-Line Numbered View (Default so teacher sees exact 5-6 line compliance) -->
+          <div id="written-lines-view" class="mt-6 space-y-2.5 bg-slate-50 p-5 sm:p-6 rounded-2xl border border-slate-200">
+            <div class="flex items-start gap-3 p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+              <p class="text-sm sm:text-base text-slate-800 leading-relaxed">
+                My name is <strong>Santiago Trujillo</strong>, and I live in <strong>Greenwood District</strong>, a welcoming, safe, and well-organized neighborhood.
+              </p>
+            </div>
+            <div class="flex items-start gap-3 p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+              <p class="text-sm sm:text-base text-slate-800 leading-relaxed">
+                In the center of our community, there is a beautiful <span class="vocab-place">roundabout</span> on <strong>Main Street</strong> and a large green <strong>park</strong> where families relax.
+              </p>
+            </div>
+            <div class="flex items-start gap-3 p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+              <p class="text-sm sm:text-base text-slate-800 leading-relaxed">
+                To the <strong>north</strong> along <strong>Maple Road</strong>, you can find the <strong>supermarket</strong> <span class="vocab-expr">in front of</span> the <strong>school</strong>, a quiet <strong>library</strong>, a <strong>hospital</strong>, and a <strong>pharmacy</strong>.
+              </p>
+            </div>
+            <div class="flex items-start gap-3 p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">4</span>
+              <p class="text-sm sm:text-base text-slate-800 leading-relaxed">
+                To the <strong>east</strong> on <strong>Main Street</strong>, there is a cozy <strong>cafÃ©</strong> right <span class="vocab-expr">next to</span> the <strong>bank</strong> and a modern <strong>store</strong> on the <span class="vocab-place">corner</span> of Cedar Street.
+              </p>
+            </div>
+            <div class="flex items-start gap-3 p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">5</span>
+              <p class="text-sm sm:text-base text-slate-800 leading-relaxed">
+                To the <strong>south</strong>, after crossing the river <span class="vocab-place">bridge</span> on <strong>Oak Avenue</strong>, residents can take the train at the <strong>subway station</strong> on River Boulevard.
+              </p>
+            </div>
+            <div class="flex items-start gap-3 p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">6</span>
+              <p class="text-sm sm:text-base text-slate-800 leading-relaxed">
+                What I like most about my neighborhood is that every place is clean, connected by safe <span class="vocab-place">crossings</span>, and only <span class="vocab-expr">five minutes by foot</span> from my home!
+              </p>
+            </div>
+          </div>
+
+          <!-- Continuous Paragraph View (Hidden by default, toggled via button) -->
+          <div id="written-paragraph-view" class="hidden mt-6 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+            <p id="written-clean-text" class="text-base sm:text-lg text-slate-800 leading-relaxed font-medium">
+              My name is Santiago Trujillo, and I live in Greenwood District, a welcoming, safe, and well-organized neighborhood. In the center of our community, there is a beautiful roundabout on Main Street and a large green park where families relax. To the north along Maple Road, you can find the supermarket in front of the school, a quiet library, a hospital, and a pharmacy. To the east on Main Street, there is a cozy cafÃ© right next to the bank and a modern store on the corner of Cedar Street. To the south, after crossing the river bridge on Oak Avenue, residents can take the train at the subway station on River Boulevard. What I like most about my neighborhood is that every place is clean, connected by safe crossings, and only five minutes by foot from my home!
+            </p>
+          </div>
+
+          <!-- Metadata Footer -->
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="font-semibold text-emerald-700"><i class="fa-solid fa-check-double"></i> Length: Exactly 6 Lines (Rubric: 5â€“6 lines)</span>
+              <span>â€¢ Includes: All 10 places, cardinal arrangement (N/S/E/W), and personal opinion</span>
+            </div>
+            <button onclick="copyNeighborhoodDescription()" class="font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i> Copy Paragraph
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         SECTION 4: ORAL MEANS - AUDIO PRESENTATION & VOICE RECORDER (MAX 2:00)
+         ===================================================================== -->
+    <section id="oral-section" class="scroll-mt-20">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-rose-950 via-indigo-950 to-slate-900 text-white p-6 sm:p-8">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-rose-200 bg-rose-500/20 px-3 py-1 rounded-full border border-rose-400/30">
+                Step 3 (Oral Means) â€¢ Audio Explanation (Max. 2 Minutes)
+              </span>
+              <h2 class="text-2xl sm:text-3xl font-extrabold mt-2">
+                Oral Presentation Studio â€” Route to the Hospital
+              </h2>
+              <p class="text-sm text-slate-300 mt-1">
+                Listen to the clear English audio guide below (Duration: <strong>00:52 / Max 02:00</strong>) or use the built-in microphone studio to record and attach your own voice!
+              </p>
+            </div>
+
+            <!-- Timer Badge -->
+            <div class="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
+              <div class="w-3 h-3 rounded-full bg-rose-500 animate-pulse" id="studio-status-dot"></div>
+              <div>
+                <div class="text-[10px] uppercase tracking-wider text-slate-300 font-bold">Oral Duration Limit</div>
+                <div class="text-lg font-mono font-extrabold text-white">
+                  <span id="oral-timer-display">00:00</span> <span class="text-slate-400 text-sm">/ 02:00 MAX</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+          <!-- LEFT 7 COLS: TELEPROMPTER SCRIPT FOR SANTIAGO TRUJILLO -->
+          <div class="lg:col-span-7 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-scroll text-indigo-600"></i>
+                  Oral Presentation Script (Destination: City General Hospital)
+                </h3>
+                <p class="text-xs text-slate-500">
+                  Estimated speaking time: ~50 seconds (clear, natural pace under 2 minutes).
+                </p>
+              </div>
+              <button onclick="selectRoute(1)" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 transition">
+                <i class="fa-solid fa-map-pin"></i> Highlight Route #2 on Map
+              </button>
+            </div>
+
+            <!-- Teleprompter Card -->
+            <div class="bg-slate-900 text-slate-100 rounded-2xl p-5 sm:p-6 space-y-3 border border-slate-800 shadow-inner leading-relaxed text-sm sm:text-base">
+              <p id="script-seg-0" class="script-line p-2 rounded-xl transition">
+                "Hello everyone and teacher! My name is <strong class="text-amber-300">Santiago Trujillo</strong>, and welcome to my interactive neighborhood map of <strong class="text-emerald-300">Greenwood District</strong>."
+              </p>
+              <p id="script-seg-1" class="script-line p-2 rounded-xl transition">
+                "Today, I am going to explain how to get from <strong class="text-amber-300">my home</strong> on Main Street to the <strong class="text-rose-300">City General Hospital</strong> in the north of the neighborhood."
+              </p>
+              <p id="script-seg-2" class="script-line p-2 rounded-xl transition">
+                "First, leave my home and <span class="underline decoration-indigo-400 font-semibold">go straight on</span> Main Street heading east past the <span class="text-amber-300 font-semibold">traffic light</span> at the <span class="text-amber-300 font-semibold">corner</span> of Pine Street."
+              </p>
+              <p id="script-seg-3" class="script-line p-2 rounded-xl transition">
+                "Second, continue walking along Main Street in front of Central Park until you reach the central <span class="text-amber-300 font-semibold">roundabout</span>."
+              </p>
+              <p id="script-seg-4" class="script-line p-2 rounded-xl transition">
+                "Third, <span class="underline decoration-indigo-400 font-semibold">turn left at</span> the <span class="text-amber-300 font-semibold">roundabout</span> onto Oak Avenue and <span class="underline decoration-indigo-400 font-semibold">go straight on</span> Oak Avenue heading north for one block."
+              </p>
+              <p id="script-seg-5" class="script-line p-2 rounded-xl transition">
+                "Finally, at the <span class="text-amber-300 font-semibold">traffic light</span> on the <span class="text-amber-300 font-semibold">corner</span> of Maple Road, <span class="underline decoration-indigo-400 font-semibold">cross the street</span> at the pedestrian <span class="text-amber-300 font-semibold">crossing</span> and <span class="underline decoration-indigo-400 font-semibold">turn right at</span> Maple Road."
+              </p>
+              <p id="script-seg-6" class="script-line p-2 rounded-xl transition">
+                "You will see the <strong class="text-rose-300">City General Hospital</strong> on your left. <span class="underline decoration-indigo-400 font-semibold">It is next to</span> the medical plaza and near the pharmacy. The entire walk takes only <span class="underline decoration-emerald-400 font-semibold">five minutes by foot</span>. Thank you for listening!"
+              </p>
+            </div>
+          </div>
+
+          <!-- RIGHT 5 COLS: AUDIO CONTROLS (AI VOICE + MICROPHONE RECORDER + FILE UPLOAD) -->
+          <div class="lg:col-span-5 space-y-5">
+
+            <!-- Option A: Built-in Interactive English Narration -->
+            <div class="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-600">
+                  Option 1 â€¢ Built-in Oral Audio Guide
+                </span>
+                <div id="tts-equalizer" class="flex items-end gap-1 h-6">
+                  <div class="eq-bar h-2"></div>
+                  <div class="eq-bar h-3"></div>
+                  <div class="eq-bar h-2"></div>
+                  <div class="eq-bar h-4"></div>
+                  <div class="eq-bar h-2"></div>
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Click play to hear the oral presentation narrated clearly in English while highlighting each sentence and animating the route on the map.
+              </p>
+
+              <div class="flex items-center gap-2.5">
+                <button onclick="playOralPresentationTTS()" id="btn-play-oral-tts" class="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm">
+                  <i class="fa-solid fa-play"></i> Play Oral Audio (0:52)
+                </button>
+                <button onclick="stopAllSpeech()" class="py-3 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs sm:text-sm transition" title="Stop Audio">
+                  <i class="fa-solid fa-stop"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Option B: Record Your Own Voice (Browser Microphone) or Upload Audio -->
+            <div class="bg-rose-50/60 rounded-2xl p-5 border border-rose-200 space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-rose-700">
+                  Option 2 â€¢ Record or Attach Santiago's Voice
+                </span>
+                <span id="rec-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white text-slate-600 border border-slate-200">
+                  Ready (Max 2:00)
+                </span>
+              </div>
+
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Record your own voice reading the teleprompter script using your microphone, or attach an existing audio recording from your device.
+              </p>
+
+              <!-- Microphone Controls -->
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="startVoiceRecording()" id="btn-rec-start" class="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm">
+                  <i class="fa-solid fa-microphone"></i> Start Recording
+                </button>
+                <button onclick="stopVoiceRecording()" id="btn-rec-stop" disabled class="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-square"></i> Stop
+                </button>
+                <label class="py-2.5 px-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs cursor-pointer transition flex items-center gap-1.5" title="Upload an MP3/WAV/M4A file">
+                  <i class="fa-solid fa-upload text-indigo-600"></i> Upload Audio
+                  <input type="file" accept="audio/*" class="hidden" onchange="handleAudioFileUpload(event)" />
+                </label>
+              </div>
+
+              <!-- Recorded / Uploaded Audio Player Box -->
+              <div id="custom-audio-container" class="hidden bg-white p-3.5 rounded-xl border border-rose-200 space-y-2.5">
+                <div class="flex items-center justify-between text-xs">
+                  <span id="custom-audio-label" class="font-bold text-slate-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-check text-emerald-500"></i> Santiago's Recorded Audio Ready
+                  </span>
+                  <a id="download-rec-link" href="#" download="Santiago_Trujillo_Oral_Directions.webm" class="font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                    <i class="fa-solid fa-download"></i> Save File
+                  </a>
+                </div>
+                <audio id="student-audio-player" controls class="w-full h-10"></audio>
+              </div>
+
+              <p id="rec-feedback-msg" class="text-[11px] text-slate-500 italic"></p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="bg-slate-900 text-slate-400 py-8 px-4 sm:px-6 lg:px-8 border-t border-slate-800 mt-12">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center">
+          ST
+        </div>
+        <div>
+          <p class="text-white font-bold">Interactive Neighborhood Map â€” English Assignment</p>
+          <p>Designed & Presented by <strong class="text-slate-200">Santiago Trujillo</strong></p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-4">
+        <button onclick="toggleRubricModal()" class="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1.5">
+          <i class="fa-solid fa-clipboard-check"></i> View Completed Rubric Checklist
+        </button>
+        <span>â€¢</span>
+        <a href="#map-section" class="hover:text-white transition">Back to Top â†‘</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- TOAST NOTIFICATION BOX (No alert() used!) -->
+  <div id="toast-box" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-3 text-xs sm:text-sm font-semibold">
+    <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+    <span id="toast-text">Copied to clipboard!</span>
+  </div>
+
+  <!-- RUBRIC CHECKLIST MODAL -->
+  <div id="rubric-modal" class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+            100% Rubric Verified
+          </span>
+          <h3 class="text-xl font-extrabold text-slate-900 mt-1">
+            Assignment Requirements Checklist
+          </h3>
+          <p class="text-xs text-slate-500">Student: <strong>Santiago Trujillo</strong> â€¢ Course: English</p>
+        </div>
+        <button onclick="toggleRubricModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2.5 text-xs sm:text-sm">
+        <div class="flex items-start gap-3 p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+          <i class="fa-solid fa-circle-check text-emerald-600 text-base mt-0.5"></i>
+          <div>
+            <p class="font-bold text-slate-900">1. Designed Map with 10 Common Places & Streets</p>
+            <p class="text-slate-600 text-xs">Includes Supermarket, School, Park, Library, Hospital, Pharmacy, CafÃ©, Bank, Store, Subway Station + Santiago's Home, named streets, Traffic Lights, Crossings, Roundabout, Bridge, Corners, and N/S/E/W Compass.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+          <i class="fa-solid fa-circle-check text-emerald-600 text-base mt-0.5"></i>
+          <div>
+            <p class="font-bold text-slate-900">2. Written Directions for 5 Destinations</p>
+            <p class="text-slate-600 text-xs">Uses "Go straight onâ€¦", "Turn left/right atâ€¦", "Cross the streetâ€¦", "It is next to/in front ofâ€¦", "Five minutes by footâ€¦", plus corner, crossing, roundabout, bridge, traffic light.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+          <i class="fa-solid fa-circle-check text-emerald-600 text-base mt-0.5"></i>
+          <div>
+            <p class="font-bold text-slate-900">3. Written Neighborhood Description (5â€“6 Lines)</p>
+            <p class="text-slate-600 text-xs">Includes a 6-line structured overview explaining what places are there, how they are arranged (North, South, East, West, Center), and what Santiago likes most.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+          <i class="fa-solid fa-circle-check text-emerald-600 text-base mt-0.5"></i>
+          <div>
+            <p class="font-bold text-slate-900">4. Oral Recording (Under 2 Minutes) & Interactivity</p>
+            <p class="text-slate-600 text-xs">Includes clickable places with audio, animated map paths, built-in oral audio narration (0:52), and a browser voice recorder + audio file uploader.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 flex justify-end">
+        <button onclick="toggleRubricModal()" class="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm transition">
+          Awesome, Back to Project
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       APPLICATION LOGIC & DATA (Self-Contained JavaScript)
+       ======================================================================= -->
+  <script>
+    // 1. DATA FOR SANTIAGO'S HOME + 10 COMMON PLACES
+    const placesData = {
+      home: {
+        id: 'home',
+        number: 'START',
+        name: "Santiago's Home",
+        category: 'Starting Point',
+        icon: 'ðŸ ',
+        colorBg: 'bg-amber-100',
+        colorText: 'text-amber-800',
+        street: 'Main Street (West Block, near Pine Street)',
+        coords: { x: 125, y: 435 },
+        description: "This is my house where I live with my family. All 5 guided routes on this map start right outside my front door on Main Street!",
+        locationRel: "It is located on the south side of Main Street, near the corner of Pine Street, and only five minutes by foot from Central Park.",
+        routeIndex: 0
+      },
+      supermarket: {
+        id: 'supermarket',
+        number: 'Place #1 of 10',
+        name: 'FreshMart Supermarket',
+        category: 'Supermarket',
+        icon: 'ðŸ›’',
+        colorBg: 'bg-emerald-100',
+        colorText: 'text-emerald-800',
+        street: 'Maple Road (North-West Block)',
+        coords: { x: 125, y: 75 },
+        description: 'A spacious neighborhood supermarket offering fresh fruits, vegetables, dairy products, and bakery items every day.',
+        locationRel: 'It is on Maple Road, directly in front of Greenwood High School and near the corner of Pine Street.',
+        routeIndex: 0
+      },
+      school: {
+        id: 'school',
+        number: 'Place #2 of 10',
+        name: 'Greenwood High School',
+        category: 'School',
+        icon: 'ðŸ«',
+        colorBg: 'bg-blue-100',
+        colorText: 'text-blue-800',
+        street: 'Corner of Maple Road & Pine Street',
+        coords: { x: 125, y: 245 },
+        description: 'The main community school with modern classrooms, science labs, and a sports court where students study English and science.',
+        locationRel: 'It is on the corner of Pine Street and Maple Road, in front of the Supermarket and west of Central Park.',
+        routeIndex: 0
+      },
+      park: {
+        id: 'park',
+        number: 'Place #3 of 10',
+        name: 'Greenwood Central Park',
+        category: 'Park',
+        icon: 'ðŸŒ³',
+        colorBg: 'bg-green-100',
+        colorText: 'text-green-800',
+        street: 'Between Maple Road, Main Street & Oak Avenue',
+        coords: { x: 380, y: 250 },
+        description: 'My favorite place in the neighborhood! It has lush green trees, walking trails, benches, and fresh air for jogging or walking dogs.',
+        locationRel: 'It is in the heart of the neighborhood, next to the Central Roundabout and directly in front of the Public Library.',
+        routeIndex: 3
+      },
+      library: {
+        id: 'library',
+        number: 'Place #4 of 10',
+        name: 'Public Community Library',
+        category: 'Library',
+        icon: 'ðŸ“š',
+        colorBg: 'bg-violet-100',
+        colorText: 'text-violet-800',
+        street: 'Maple Road (Between Pine St & Oak Ave)',
+        coords: { x: 380, y: 75 },
+        description: 'A quiet municipal library with thousands of books, study tables, free computers, and English reading clubs for students.',
+        locationRel: 'It is on Maple Road, directly in front of Central Park and between the traffic lights at Pine Street and Oak Avenue.',
+        routeIndex: 3
+      },
+      hospital: {
+        id: 'hospital',
+        number: 'Place #5 of 10',
+        name: 'City General Hospital',
+        category: 'Hospital',
+        icon: 'ðŸ¥',
+        colorBg: 'bg-red-100',
+        colorText: 'text-red-800',
+        street: 'Maple Road (North-East of Oak Avenue)',
+        coords: { x: 660, y: 75 },
+        description: 'A 24-hour medical center with friendly doctors, nurses, and emergency services keeping our community healthy and safe.',
+        locationRel: 'It is on Maple Road past the corner of Oak Avenue, near HealthPlus Pharmacy and in front of the commercial plaza.',
+        routeIndex: 1
+      },
+      pharmacy: {
+        id: 'pharmacy',
+        number: 'Place #6 of 10',
+        name: 'HealthPlus Pharmacy',
+        category: 'Pharmacy',
+        icon: 'ðŸ’Š',
+        colorBg: 'bg-teal-100',
+        colorText: 'text-teal-800',
+        street: 'Corner of Maple Road & Cedar Street',
+        coords: { x: 902, y: 75 },
+        description: 'A clean neighborhood drugstore where residents pick up prescriptions, vitamins, and first-aid products.',
+        locationRel: 'It is on the eastern end of Maple Road, next to the Cedar Street intersection and one block east of the Hospital.',
+        routeIndex: 1
+      },
+      cafe: {
+        id: 'cafe',
+        number: 'Place #7 of 10',
+        name: 'Sunrise Coffee & Bakery',
+        category: 'CafÃ©',
+        icon: 'â˜•',
+        colorBg: 'bg-orange-100',
+        colorText: 'text-orange-800',
+        street: 'Main Street (East of the Roundabout)',
+        coords: { x: 608, y: 250 },
+        description: 'A warm and cozy cafÃ© serving hot chocolate, Colombian coffee, and fresh pastries where friends meet after school.',
+        locationRel: 'It is on Main Street, right next to the National Trust Bank and east of the central roundabout.',
+        routeIndex: 4
+      },
+      bank: {
+        id: 'bank',
+        number: 'Place #8 of 10',
+        name: 'National Trust Bank',
+        category: 'Bank',
+        icon: 'ðŸ¦',
+        colorBg: 'bg-slate-200',
+        colorText: 'text-slate-800',
+        street: 'Main Street (Between Oak Ave & Cedar St)',
+        coords: { x: 712, y: 250 },
+        description: 'The neighborhood bank featuring ATMs and financial services for families and local business owners.',
+        locationRel: 'It is located on Main Street, right next to Sunrise CafÃ© and near the corner of Cedar Street.',
+        routeIndex: 4
+      },
+      store: {
+        id: 'store',
+        number: 'Place #9 of 10',
+        name: 'MegaTech & Daily Store',
+        category: 'Store',
+        icon: 'ðŸ›ï¸',
+        colorBg: 'bg-fuchsia-100',
+        colorText: 'text-fuchsia-800',
+        street: 'Corner of Main Street & Cedar Street',
+        coords: { x: 902, y: 250 },
+        description: 'A popular department store selling electronics, headphones, school supplies, clothes, and gifts.',
+        locationRel: 'It is on the corner of Main Street and Cedar Street, next to the traffic light and across Cedar Street from the Bank.',
+        routeIndex: 4
+      },
+      subway: {
+        id: 'subway',
+        number: 'Place #10 of 10',
+        name: 'Metro South Subway Station',
+        category: 'Subway Station',
+        icon: 'ðŸš‡',
+        colorBg: 'bg-indigo-100',
+        colorText: 'text-indigo-800',
+        street: 'River Boulevard (South of the River Bridge)',
+        coords: { x: 660, y: 615 },
+        description: 'A fast, eco-friendly underground train station connecting Greenwood District with downtown in just ten minutes.',
+        locationRel: 'It is on River Boulevard after crossing the River Bridge on Oak Avenue, in front of the south river promenade.',
+        routeIndex: 2
+      }
+    };
+
+    // 2. DATA FOR THE 5 GUIDED ROUTES FROM SANTIAGO'S HOME
+    const routesData = [
+      {
+        id: 0,
+        shortTitle: 'Route 1: Supermarket',
+        destinationName: 'FreshMart Supermarket',
+        placeKey: 'supermarket',
+        icon: 'ðŸ›’',
+        walkingTime: 'Five minutes by foot',
+        svgPoints: '125,415 125,350 240,350 240,150 125,150 125,95',
+        destCoords: { x: 125, y: 75 },
+        stepsHtml: [
+          'Start at <strong>Santiago\'s Home</strong> and <span class="vocab-expr">go straight on</span> <strong>Main Street</strong> heading east to the <span class="vocab-place">corner</span> of Pine Street.',
+          '<span class="vocab-expr">Turn left at</span> the <span class="vocab-place">traffic light</span> onto <strong>Pine Street</strong>.',
+          '<span class="vocab-expr">Go straight on</span> Pine Street past Greenwood High School until you reach the <span class="vocab-place">traffic light</span> on <strong>Maple Road</strong>.',
+          '<span class="vocab-expr">Turn left at</span> the <span class="vocab-place">corner</span> onto Maple Road and <span class="vocab-expr">cross the street</span> at the pedestrian <span class="vocab-place">crossing</span>.',
+          'You will arrive at <strong>FreshMart Supermarket</strong>. <span class="vocab-expr">It is in front of</span> the school and takes only <span class="vocab-expr">five minutes by foot</span>.'
+        ],
+        plainText: "To get from my home to FreshMart Supermarket, first go straight on Main Street to the corner of Pine Street. Next, turn left at the traffic light onto Pine Street and go straight on Pine Street for one block. Then, turn left at the corner of Maple Road and cross the street at the pedestrian crossing. The supermarket is on your right. It is in front of Greenwood High School, and the walk takes about five minutes by foot.",
+        vocabUsed: ['Go straight onâ€¦', 'Turn left atâ€¦', 'Cross the streetâ€¦', 'It is in front ofâ€¦', 'Five minutes by footâ€¦', 'corner', 'traffic light', 'crossing']
+      },
+      {
+        id: 1,
+        shortTitle: 'Route 2: Hospital',
+        destinationName: 'City General Hospital',
+        placeKey: 'hospital',
+        icon: 'ðŸ¥',
+        walkingTime: 'Five minutes by foot',
+        svgPoints: '125,415 125,350 520,350 520,150 660,150 660,95',
+        destCoords: { x: 660, y: 75 },
+        stepsHtml: [
+          'Leave <strong>Santiago\'s Home</strong> and <span class="vocab-expr">go straight on</span> <strong>Main Street</strong> past the <span class="vocab-place">traffic light</span> at the <span class="vocab-place">corner</span> of Pine Street.',
+          'Continue walking along Main Street in front of Central Park until you reach the central <span class="vocab-place">roundabout</span>.',
+          '<span class="vocab-expr">Turn left at</span> the <span class="vocab-place">roundabout</span> onto <strong>Oak Avenue</strong> and <span class="vocab-expr">go straight on</span> Oak Avenue heading north.',
+          'At the <span class="vocab-place">traffic light</span> on the <span class="vocab-place">corner</span> of Maple Road, <span class="vocab-expr">cross the street</span> at the <span class="vocab-place">crossing</span> and <span class="vocab-expr">turn right at</span> <strong>Maple Road</strong>.',
+          'You will see <strong>City General Hospital</strong> on your left. <span class="vocab-expr">It is next to</span> the medical plaza and takes <span class="vocab-expr">five minutes by foot</span>.'
+        ],
+        plainText: "To get from my home to City General Hospital, first go straight on Main Street past the traffic light at the corner of Pine Street. Continue straight until you reach the central roundabout. Turn left at the roundabout onto Oak Avenue and go straight on Oak Avenue for one block. At the traffic light on the corner of Maple Road, cross the street at the pedestrian crossing and turn right at Maple Road. The hospital is next to the medical plaza, and it takes five minutes by foot.",
+        vocabUsed: ['Go straight onâ€¦', 'Turn left atâ€¦', 'Turn right atâ€¦', 'Cross the streetâ€¦', 'It is next toâ€¦', 'Five minutes by footâ€¦', 'roundabout', 'traffic light', 'corner', 'crossing']
+      },
+      {
+        id: 2,
+        shortTitle: 'Route 3: Subway Station',
+        destinationName: 'Metro South Subway Station',
+        placeKey: 'subway',
+        icon: 'ðŸš‡',
+        walkingTime: 'Five minutes by foot',
+        svgPoints: '125,415 125,350 520,350 520,550 660,550 660,595',
+        destCoords: { x: 660, y: 615 },
+        stepsHtml: [
+          'Start at <strong>Santiago\'s Home</strong> and <span class="vocab-expr">go straight on</span> <strong>Main Street</strong> past the <span class="vocab-place">corner</span> of Pine Street to the central <span class="vocab-place">roundabout</span>.',
+          '<span class="vocab-expr">Turn right at</span> the <span class="vocab-place">roundabout</span> onto <strong>Oak Avenue</strong> heading south.',
+          '<span class="vocab-expr">Go straight on</span> Oak Avenue and walk across the <span class="vocab-place">bridge</span> (River Bridge) over Bluewater River.',
+          'At the <span class="vocab-place">traffic light</span> on the <span class="vocab-place">corner</span> of <strong>River Boulevard</strong>, <span class="vocab-expr">turn left at</span> River Boulevard.',
+          '<span class="vocab-expr">Cross the street</span> at the pedestrian <span class="vocab-place">crossing</span> to enter the <strong>Subway Station</strong>. <span class="vocab-expr">It is in front of</span> the river promenade and takes <span class="vocab-expr">five minutes by foot</span>.'
+        ],
+        plainText: "To get from my home to the Metro South Subway Station, go straight on Main Street to the central roundabout. Turn right at the roundabout onto Oak Avenue heading south. Go straight on Oak Avenue and cross the bridge over Bluewater River. At the traffic light on the corner of River Boulevard, turn left at River Boulevard and cross the street at the pedestrian crossing. The subway station is in front of the river walk, about five minutes by foot.",
+        vocabUsed: ['Go straight onâ€¦', 'Turn right atâ€¦', 'Turn left atâ€¦', 'Cross the streetâ€¦', 'It is in front ofâ€¦', 'Five minutes by footâ€¦', 'roundabout', 'bridge', 'traffic light', 'corner', 'crossing']
+      },
+      {
+        id: 3,
+        shortTitle: 'Route 4: Library',
+        destinationName: 'Public Community Library',
+        placeKey: 'library',
+        icon: 'ðŸ“š',
+        walkingTime: 'Five minutes by foot',
+        svgPoints: '125,415 125,350 240,350 240,150 380,150 380,95',
+        destCoords: { x: 380, y: 75 },
+        stepsHtml: [
+          'Walk out of <strong>Santiago\'s Home</strong> and <span class="vocab-expr">go straight on</span> <strong>Main Street</strong> to the <span class="vocab-place">traffic light</span> at the <span class="vocab-place">corner</span> of Pine Street.',
+          '<span class="vocab-expr">Turn left at</span> <strong>Pine Street</strong> and <span class="vocab-expr">go straight on</span> Pine Street between the School and Central Park.',
+          'When you reach the <span class="vocab-place">traffic light</span> on the <span class="vocab-place">corner</span> of <strong>Maple Road</strong>, <span class="vocab-expr">turn right at</span> Maple Road.',
+          '<span class="vocab-expr">Go straight on</span> Maple Road to the middle of the block and <span class="vocab-expr">cross the street</span> at the pedestrian <span class="vocab-place">crossing</span>.',
+          'You will arrive at the <strong>Public Community Library</strong>. <span class="vocab-expr">It is in front of</span> Central Park and only <span class="vocab-expr">five minutes by foot</span> from home.'
+        ],
+        plainText: "To get from my home to the Public Community Library, go straight on Main Street to the traffic light at the corner of Pine Street. Turn left at Pine Street and walk north beside Central Park. At the corner of Maple Road, turn right at the traffic light and go straight on Maple Road. Finally, cross the street at the pedestrian crossing. The library is in front of Central Park and takes five minutes by foot.",
+        vocabUsed: ['Go straight onâ€¦', 'Turn left atâ€¦', 'Turn right atâ€¦', 'Cross the streetâ€¦', 'It is in front ofâ€¦', 'Five minutes by footâ€¦', 'traffic light', 'corner', 'crossing']
+      },
+      {
+        id: 4,
+        shortTitle: 'Route 5: CafÃ© & Bank',
+        destinationName: 'Sunrise CafÃ© & National Trust Bank',
+        placeKey: 'cafe',
+        icon: 'â˜•',
+        walkingTime: 'Five minutes by foot',
+        svgPoints: '125,415 125,350 680,350 680,275',
+        destCoords: { x: 660, y: 250 },
+        stepsHtml: [
+          'Start at <strong>Santiago\'s Home</strong> and <span class="vocab-expr">go straight on</span> <strong>Main Street</strong> heading east past the <span class="vocab-place">traffic light</span> on the <span class="vocab-place">corner</span> of Pine Street.',
+          'Continue straight through the central <span class="vocab-place">roundabout</span> staying on <strong>Main Street</strong>.',
+          'Walk past the <span class="vocab-place">corner</span> of Oak Avenue until you see the commercial block on the north side of the street.',
+          '<span class="vocab-expr">Cross the street</span> at the pedestrian <span class="vocab-place">crossing</span> in front of the plaza.',
+          'You will reach <strong>Sunrise CafÃ©</strong> and <strong>National Trust Bank</strong>. The bank <span class="vocab-expr">is next to</span> the cafÃ©, and the walk is <span class="vocab-expr">five minutes by foot</span>.'
+        ],
+        plainText: "To get from my home to Sunrise CafÃ© and National Trust Bank, simply go straight on Main Street heading east past the traffic light on the corner of Pine Street. Continue straight through the central roundabout on Main Street. Past the corner of Oak Avenue, cross the street at the pedestrian crossing. You will see Sunrise CafÃ© right in front of you, and the Bank is next to the cafÃ©. It takes five minutes by foot.",
+        vocabUsed: ['Go straight onâ€¦', 'Cross the streetâ€¦', 'It is next toâ€¦', 'Five minutes by footâ€¦', 'traffic light', 'corner', 'roundabout', 'crossing']
+      }
+    ];
+
+    // Landmarks info for interactive inspection
+    const landmarksInfo = {
+      'traffic-light': {
+        name: 'Traffic Lights (5 Intersections)',
+        icon: 'ðŸš¦',
+        street: 'Major Street Intersections',
+        desc: 'Electronic traffic signals with red, yellow, and green lights that control cars and help pedestrians cross safely.',
+        rel: 'Used in sentences like: "Turn left at the traffic light on the corner of Pine Street."'
+      },
+      'crossing': {
+        name: 'Pedestrian Crossings (Zebra Stripes)',
+        icon: 'ðŸš¸',
+        street: 'Across Maple Rd, Main St & River Blvd',
+        desc: 'White striped crosswalks painted on the streets where people walk across the road safely.',
+        rel: 'Used in sentences like: "Cross the street at the pedestrian crossing in front of the library."'
+      },
+      'roundabout': {
+        name: 'Central Roundabout & Fountain Square',
+        icon: 'ðŸ”„',
+        street: 'Center of Main Street & Oak Avenue',
+        desc: 'A circular intersection with a fountain in the middle where traffic flows smoothly around the central island.',
+        rel: 'Used in sentences like: "Turn left at the roundabout onto Oak Avenue."'
+      },
+      'bridge': {
+        name: 'Oak River Bridge',
+        icon: 'ðŸŒ‰',
+        street: 'Oak Avenue over Bluewater River',
+        desc: 'A sturdy bridge that connects the central neighborhood with River Boulevard and the Subway Station in the south.',
+        rel: 'Used in sentences like: "Go straight on Oak Avenue and cross the bridge over the river."'
+      },
+      'corner': {
+        name: 'Street Corners',
+        icon: 'ðŸ“',
+        street: 'Intersections of Pine, Oak, Cedar & Main',
+        desc: 'The points where two streets meet at an angle, helping residents orient themselves when turning left or right.',
+        rel: 'Used in sentences like: "The school is on the corner of Pine Street and Maple Road."'
+      },
+      'compass': {
+        name: 'Compass Rose (N, S, E, W)',
+        icon: 'ðŸ§­',
+        street: 'Bottom-Right Corner of the Map',
+        desc: 'Shows the four cardinal directions: North (up), South (down), East (right), and West (left).',
+        rel: 'Helps explain how the neighborhood is arranged from North to South and West to East.'
+      }
+    };
+
+    let currentPlaceKey = 'supermarket';
+    let currentRouteIndex = 0;
+
+    // Initialize UI on window load
+    window.onload = function () {
+      renderPlacesDirectory();
+      renderRouteSelectorCards();
+      renderAllRoutesSummarySheet();
+      selectPlace('supermarket', false);
+      selectRoute(0, false);
+    };
+
+    // Populate the 11 clickable buttons in the right-hand directory
+    function renderPlacesDirectory() {
+      const container = document.getElementById('places-grid-list');
+      const keys = Object.keys(placesData);
+      container.innerHTML = keys.map(key => {
+        const p = placesData[key];
+        const isHome = key === 'home';
+        return `
+          <button onclick="selectPlace('${key}')" id="dir-btn-${key}"
+            class="dir-place-btn flex items-center gap-2 p-2 rounded-xl border text-left transition ${isHome ? 'col-span-2 bg-amber-50/80 border-amber-300' : 'bg-slate-50 hover:bg-indigo-50/60 border-slate-200'}">
+            <span class="text-lg shrink-0">${p.icon}</span>
+            <div class="truncate">
+              <div class="text-[10px] font-bold text-slate-400 leading-none">${p.number}</div>
+              <div class="text-xs font-bold text-slate-800 truncate">${p.name}</div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    // Select a building on the map and update the inspector panel
+    function selectPlace(placeKey, speakNow = false) {
+      const place = placesData[placeKey];
+      if (!place) return;
+      currentPlaceKey = placeKey;
+
+      // Update active visual state on SVG nodes
+      document.querySelectorAll('.map-node').forEach(el => el.classList.remove('active-node'));
+      const activeSvgNode = document.getElementById('node-' + placeKey);
+      if (activeSvgNode) activeSvgNode.classList.add('active-node');
+
+      // Update Inspector Card
+      document.getElementById('detail-icon').innerHTML = place.icon;
+      document.getElementById('detail-icon').className = `w-14 h-14 rounded-2xl ${place.colorBg} ${place.colorText} flex items-center justify-center text-3xl shadow-sm`;
+      document.getElementById('detail-badge').textContent = `${place.number} â€¢ ${place.category}`;
+      document.getElementById('detail-badge').className = `text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${place.colorBg} ${place.colorText}`;
+      document.getElementById('detail-title').textContent = place.name;
+      document.getElementById('detail-street').textContent = `ðŸ“ ${place.street}`;
+      document.getElementById('detail-desc').textContent = place.description;
+      document.getElementById('detail-location-rel').innerHTML = place.locationRel;
+
+      const routeBtn = document.getElementById('detail-route-btn');
+      routeBtn.setAttribute('onclick', `selectRoute(${place.routeIndex})`);
+
+      // Highlight directory button
+      document.querySelectorAll('.dir-place-btn').forEach(btn => {
+        btn.classList.remove('ring-2', 'ring-indigo-600', 'bg-indigo-50');
+      });
+      const dirBtn = document.getElementById('dir-btn-' + placeKey);
+      if (dirBtn) dirBtn.classList.add('ring-2', 'ring-indigo-600', 'bg-indigo-50');
+
+      if (speakNow) {
+        speakCurrentPlace();
+      }
+    }
+
+    // Inspect a landmark (Traffic Light, Crossing, Roundabout, Bridge, Corner, Compass)
+    function inspectLandmark(type) {
+      const info = landmarksInfo[type];
+      if (!info) return;
+      highlightLandmarks(type === 'compass' ? 'all' : type);
+
+      document.getElementById('detail-icon').innerHTML = info.icon;
+      document.getElementById('detail-icon').className = 'w-14 h-14 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl shadow-sm';
+      document.getElementById('detail-badge').textContent = 'Map Landmark & Vocabulary';
+      document.getElementById('detail-badge').className = 'text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800';
+      document.getElementById('detail-title').textContent = info.name;
+      document.getElementById('detail-street').textContent = `ðŸ“ ${info.street}`;
+      document.getElementById('detail-desc').textContent = info.desc;
+      document.getElementById('detail-location-rel').textContent = info.rel;
+
+      speakText(`${info.name}. ${info.desc} ${info.rel}`);
+    }
+
+    // Highlight specific landmark categories on the SVG map
+    function highlightLandmarks(category) {
+      document.querySelectorAll('.landmark-item').forEach(el => {
+        el.classList.remove('landmark-highlight');
+      });
+      document.querySelectorAll('.hl-btn').forEach(btn => {
+        btn.className = 'hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-100 text-slate-700 transition flex items-center gap-1';
+      });
+
+      const activeBtn = document.getElementById('hl-' + category);
+      if (activeBtn) {
+        activeBtn.className = 'hl-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white transition flex items-center gap-1';
+      }
+
+      if (category !== 'all') {
+        document.querySelectorAll('.landmark-' + category).forEach(el => {
+          el.classList.add('landmark-highlight');
+        });
+      }
+    }
+
+    // Render the 5 route selector cards
+    function renderRouteSelectorCards() {
+      const container = document.getElementById('route-cards-selector');
+      container.innerHTML = routesData.map((r, idx) => `
+        <button onclick="selectRoute(${idx})" id="route-card-btn-${idx}"
+          class="route-card-btn p-4 rounded-2xl border text-left transition flex flex-col justify-between gap-2 bg-white hover:border-indigo-400 shadow-sm">
+          <div class="flex items-center justify-between w-full">
+            <span class="text-2xl">${r.icon}</span>
+            <span class="text-[11px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">Route #${idx + 1}</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-400">From Santiago's Home to:</div>
+            <div class="text-sm font-extrabold text-slate-900 leading-snug">${r.destinationName}</div>
+          </div>
+          <div class="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
+            <i class="fa-solid fa-shoe-prints"></i> ${r.walkingTime}
+          </div>
+        </button>
+      `).join('');
+    }
+
+    // Select one of the 5 routes and animate it on the SVG map
+    function selectRoute(index, scrollOrSpeak = false) {
+      const route = routesData[index];
+      if (!route) return;
+      currentRouteIndex = index;
+
+      // Show route layer on map
+      const routeLayer = document.getElementById('route-layer');
+      routeLayer.classList.remove('hidden');
+
+      document.getElementById('route-glow-line').setAttribute('points', route.svgPoints);
+      document.getElementById('route-dash-line').setAttribute('points', route.svgPoints);
+      document.getElementById('route-dest-ring').setAttribute('cx', route.destCoords.x);
+      document.getElementById('route-dest-ring').setAttribute('cy', route.destCoords.y);
+
+      // Update top map bar banner & buttons
+      document.getElementById('active-route-banner').textContent = `Route ${index + 1}: Home âž” ${route.destinationName}`;
+      for (let i = 0; i < 5; i++) {
+        const topBtn = document.getElementById('top-route-btn-' + i);
+        if (topBtn) {
+          topBtn.className = (i === index)
+            ? 'px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600 text-white transition shadow-sm'
+            : 'px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+        }
+        const cardBtn = document.getElementById('route-card-btn-' + i);
+        if (cardBtn) {
+          cardBtn.className = (i === index)
+            ? 'route-card-btn p-4 rounded-2xl border-2 border-indigo-600 bg-indigo-50/50 text-left transition flex flex-col justify-between gap-2 shadow-md'
+            : 'route-card-btn p-4 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 text-left transition flex flex-col justify-between gap-2 shadow-sm';
+        }
+      }
+
+      // Also select destination place on map inspector
+      selectPlace(route.placeKey, false);
+
+      // Update Detailed Directions Box
+      document.getElementById('route-detail-icon').textContent = route.icon;
+      document.getElementById('route-detail-number').textContent = `Destination #${index + 1} of 5`;
+      document.getElementById('route-detail-time').innerHTML = `<i class="fa-solid fa-person-walking"></i> ${route.walkingTime}`;
+      document.getElementById('route-detail-title').textContent = `From Santiago's Home to ${route.destinationName}`;
+
+      // Render numbered steps
+      const stepsContainer = document.getElementById('route-steps-list');
+      stepsContainer.innerHTML = route.stepsHtml.map((stepHtml, sIdx) => `
+        <div class="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/80">
+          <span class="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+            ${sIdx + 1}
+          </span>
+          <p class="text-sm text-slate-800 leading-relaxed">${stepHtml}</p>
+        </div>
+      `).join('');
+
+      // Render full paragraph & vocabulary pills
+      document.getElementById('route-full-paragraph').textContent = route.plainText;
+      document.getElementById('route-vocab-tags').innerHTML = route.vocabUsed.map(tag => {
+        const isLandmark = ['corner', 'crossing', 'roundabout', 'bridge', 'traffic light'].includes(tag);
+        return `<span class="${isLandmark ? 'vocab-place' : 'vocab-expr'} text-xs">${tag}</span>`;
+      }).join('');
+
+      if (scrollOrSpeak) {
+        speakActiveRoute();
+      }
+    }
+
+    function clearRouteOverlay() {
+      document.getElementById('route-layer').classList.add('hidden');
+      document.getElementById('active-route-banner').textContent = 'All Routes Hidden (Click R1â€“R5 to Show)';
+    }
+
+    // Render all 5 routes in the teacher quick-review accordion
+    function renderAllRoutesSummarySheet() {
+      const container = document.getElementById('all-routes-summary-sheet');
+      container.innerHTML = routesData.map((r, idx) => `
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-extrabold text-sm text-slate-900">${r.icon} Route ${idx + 1}: Home to ${r.destinationName}</span>
+            <button onclick="selectRoute(${idx}); speakActiveRoute();" class="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+              <i class="fa-solid fa-volume-high"></i> Listen
+            </button>
+          </div>
+          <p class="text-xs text-slate-700 leading-relaxed">${r.plainText}</p>
+        </div>
+      `).join('');
+    }
+
+    // =======================================================================
+    // WEB SPEECH API (ENGLISH TTS FOR PLACES, ROUTES & ORAL PRESENTATION)
+    // =======================================================================
+    let oralTimerInterval = null;
+    let oralSeconds = 0;
+
+    function stopAllSpeech() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      clearInterval(oralTimerInterval);
+      document.getElementById('tts-equalizer').classList.remove('playing');
+      document.querySelectorAll('.script-line').forEach(el => {
+        el.classList.remove('bg-indigo-950/90', 'ring-1', 'ring-indigo-400');
+      });
+    }
+
+    function speakText(text, onEndCallback = null) {
+      stopAllSpeech();
+      if (!('speechSynthesis' in window)) {
+        showToast('Speech synthesis is not supported on this browser.');
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.96;
+      utterance.pitch = 1.0;
+
+      // Pick a clear English voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.lang.includes('en-US') || v.lang.includes('en_US')) || voices.find(v => v.lang.startsWith('en'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+
+      utterance.onend = () => {
+        if (onEndCallback) onEndCallback();
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function speakCurrentPlace() {
+      const p = placesData[currentPlaceKey];
+      if (!p) return;
+      const text = `${p.name}. ${p.description} ${p.locationRel}`;
+      speakText(text);
+      showToast(`Playing audio: ${p.name}`);
+    }
+
+    function speakActiveRoute() {
+      const r = routesData[currentRouteIndex];
+      if (!r) return;
+      speakText(`Directions from Santiago's Home to ${r.destinationName}. ${r.plainText}`);
+      showToast(`Reading Route #${currentRouteIndex + 1}: ${r.destinationName}`);
+    }
+
+    function speakWrittenDescription() {
+      const text = document.getElementById('written-clean-text').textContent.trim();
+      speakText(text);
+      showToast('Reading 6-Line Neighborhood Description...');
+    }
+
+    // Play the structured Oral Presentation with live timer & teleprompter highlighting
+    function playOralPresentationTTS() {
+      stopAllSpeech();
+      selectRoute(1, false); // Highlight Route #2 (Hospital) on the map
+
+      const segments = [
+        "Hello everyone and teacher! My name is Santiago Trujillo, and welcome to my interactive neighborhood map of Greenwood District.",
+        "Today, I am going to explain how to get from my home on Main Street to the City General Hospital in the north of the neighborhood.",
+        "First, leave my home and go straight on Main Street heading east past the traffic light at the corner of Pine Street.",
+        "Second, continue walking along Main Street in front of Central Park until you reach the central roundabout.",
+        "Third, turn left at the roundabout onto Oak Avenue and go straight on Oak Avenue heading north for one block.",
+        "Finally, at the traffic light on the corner of Maple Road, cross the street at the pedestrian crossing and turn right at Maple Road.",
+        "You will see the City General Hospital on your left. It is next to the medical plaza and near the pharmacy. The entire walk takes only five minutes by foot. Thank you for listening!"
+      ];
+
+      document.getElementById('tts-equalizer').classList.add('playing');
+      oralSeconds = 0;
+      updateOralTimerUI(0);
+
+      oralTimerInterval = setInterval(() => {
+        oralSeconds++;
+        updateOralTimerUI(oralSeconds);
+        if (oralSeconds >= 120) {
+          stopAllSpeech();
+        }
+      }, 1000);
+
+      let currentSeg = 0;
+
+      function speakNextSegment() {
+        if (currentSeg >= segments.length) {
+          stopAllSpeech();
+          showToast('Oral presentation finished (Under 2:00 limit!)');
+          return;
+        }
+        document.querySelectorAll('.script-line').forEach(el => {
+          el.classList.remove('bg-indigo-950/90', 'ring-1', 'ring-indigo-400');
+        });
+        const activeLine = document.getElementById('script-seg-' + currentSeg);
+        if (activeLine) {
+          activeLine.classList.add('bg-indigo-950/90', 'ring-1', 'ring-indigo-400');
+        }
+
+        const u = new SpeechSynthesisUtterance(segments[currentSeg]);
+        u.lang = 'en-US';
+        u.rate = 0.95;
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => v.lang.includes('en-US')) || voices.find(v => v.lang.startsWith('en'));
+        if (preferredVoice) u.voice = preferredVoice;
+
+        u.onend = () => {
+          currentSeg++;
+          speakNextSegment();
+        };
+        window.speechSynthesis.speak(u);
+      }
+
+      speakNextSegment();
+    }
+
+    function updateOralTimerUI(seconds) {
+      const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const secs = String(seconds % 60).padStart(2, '0');
+      document.getElementById('oral-timer-display').textContent = `${mins}:${secs}`;
+    }
+
+    // =======================================================================
+    // BROWSER VOICE RECORDER (MediaRecorder API, Max 2:00) & AUDIO UPLOAD
+    // =======================================================================
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recTimerInterval = null;
+    let recSeconds = 0;
+
+    async function startVoiceRecording() {
+      stopAllSpeech();
+      const feedback = document.getElementById('rec-feedback-msg');
+      const badge = document.getElementById('rec-badge');
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        feedback.textContent = 'Microphone recording is not supported in this browser. You can use "Upload Audio" or the Built-in Oral Guide.';
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            recordedChunks.push(e.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const player = document.getElementById('student-audio-player');
+          player.src = audioUrl;
+
+          const dlLink = document.getElementById('download-rec-link');
+          dlLink.href = audioUrl;
+
+          document.getElementById('custom-audio-container').classList.remove('hidden');
+          document.getElementById('custom-audio-label').innerHTML = `<i class="fa-solid fa-circle-check text-emerald-500"></i> Santiago's Voice Recording (${formatTime(recSeconds)})`;
+          badge.textContent = 'Recorded!';
+          badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300';
+          feedback.textContent = 'Recording complete! Press play above to listen or click Save File to download.';
+
+          // Stop microphone tracks
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        recSeconds = 0;
+        updateOralTimerUI(0);
+
+        document.getElementById('btn-rec-start').disabled = true;
+        document.getElementById('btn-rec-start').classList.add('opacity-50');
+        document.getElementById('btn-rec-stop').disabled = false;
+        badge.textContent = 'â— Recording...';
+        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-600 text-white animate-pulse';
+        feedback.textContent = 'Speak clearly into your microphone! Reading the teleprompter script above... (Max 2:00)';
+
+        recTimerInterval = setInterval(() => {
+          recSeconds++;
+          updateOralTimerUI(recSeconds);
+          // Automatically stop at 2 minutes (120 seconds) per rubric requirement
+          if (recSeconds >= 120) {
+            stopVoiceRecording();
+          }
+        }, 1000);
+
+      } catch (err) {
+        feedback.textContent = 'Microphone permission was declined or unavailable. You can upload an audio file or play Option 1.';
+      }
+    }
+
+    function stopVoiceRecording() {
+      clearInterval(recTimerInterval);
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      document.getElementById('btn-rec-start').disabled = false;
+      document.getElementById('btn-rec-start').classList.remove('opacity-50');
+      document.getElementById('btn-rec-stop').disabled = true;
+    }
+
+    function handleAudioFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const player = document.getElementById('student-audio-player');
+      player.src = url;
+
+      const dlLink = document.getElementById('download-rec-link');
+      dlLink.href = url;
+      dlLink.download = file.name;
+
+      document.getElementById('custom-audio-container').classList.remove('hidden');
+      document.getElementById('custom-audio-label').innerHTML = `<i class="fa-solid fa-file-audio text-indigo-600"></i> ${file.name}`;
+      showToast('Audio file attached to your presentation!');
+    }
+
+    function formatTime(sec) {
+      const m = String(Math.floor(sec / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    // =======================================================================
+    // UTILITY HELPERS (Copy to Clipboard, Toggle Line View, Modal, Toast)
+    // =======================================================================
+    function toggleLineNumbers() {
+      const linesView = document.getElementById('written-lines-view');
+      const paraView = document.getElementById('written-paragraph-view');
+      linesView.classList.toggle('hidden');
+      paraView.classList.toggle('hidden');
+    }
+
+    function copyTextToClipboard(text, message) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      showToast(message);
+    }
+
+    function copyRouteText() {
+      const r = routesData[currentRouteIndex];
+      copyTextToClipboard(r.plainText, `Copied Route #${currentRouteIndex + 1} directions!`);
+    }
+
+    function copyNeighborhoodDescription() {
+      const text = document.getElementById('written-clean-text').textContent.trim();
+      copyTextToClipboard(text, 'Copied 6-line neighborhood description!');
+    }
+
+    function toggleRubricModal() {
+      const modal = document.getElementById('rubric-modal');
+      modal.classList.toggle('hidden');
+    }
+
+    let toastTimeout = null;
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      document.getElementById('toast-text').textContent = msg;
+      box.classList.remove('hidden');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        box.classList.add('hidden');
+      }, 3200);
+    }
+  </script>
+</body>
+</html>
